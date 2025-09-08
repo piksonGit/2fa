@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2FA 实时验证码获取</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9f7ef;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #28a745;
+        }
+        .error {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8d7da;
+            border-radius: 5px;
+            color: #721c24;
+        }
+        .countdown {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+        .progress-container {
+            width: 100%;
+            height: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #4caf50;
+            width: 0%;
+            transition: width 1s linear, background-color 0.3s ease;
+        }
+        .progress-bar.warning {
+            background-color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>2FA 实时验证码获取</h1>
+        <div class="input-group">
+            <label for="secret">Base32密钥:</label>
+            <input type="text" id="secret" placeholder="请输入Base32格式的密钥" maxlength="32">
+        </div>
+        <button onclick="generateTOTP()">生成验证码</button>
+        <div id="result"></div>
+        <div id="countdown" class="countdown"></div>
+        <div class="progress-container">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+    </div>
+
+    <script>
+        let countdownInterval;
+        
+        // 更新倒计时和进度条
+        function updateCountdown() {
+            const now = Math.floor(Date.now() / 1000);
+            const seconds = 30 - (now % 30);
+            document.getElementById('countdown').textContent = `验证码将在 ${seconds} 秒后更新`;
+            
+            // 更新进度条
+            const progressBar = document.getElementById('progress-bar');
+            const percentage = ((30 - seconds) / 30) * 100;
+            progressBar.style.width = percentage + '%';
+            
+            // 在最后五秒时将进度条变为红色
+            if (seconds <= 5) {
+                progressBar.classList.add('warning');
+            } else {
+                progressBar.classList.remove('warning');
+            }
+            
+            // 倒计时结束时自动更新验证码
+            if (seconds === 30 && document.getElementById('secret').value.trim()) {
+                generateTOTP();
+            }
+        }
+
+        // 启动倒计时
+        function startCountdown() {
+            // 先立即更新一次倒计时
+            updateCountdown();
+            
+            // 清除之前的定时器（如果有的话）
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            // 设置新的定时器
+            countdownInterval = setInterval(updateCountdown, 1000);
+        }
+
+        // 生成TOTP验证码
+        async function generateTOTP() {
+            const secret = document.getElementById('secret').value.trim();
+            
+            if (!secret) {
+                showError('请输入Base32密钥');
+                return;
+            }
+
+            try {
+                const response = await fetch('/generate-totp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ secret })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(data.token);
+                    // 启动倒计时
+                    startCountdown();
+                } else {
+                    showError(data.error || '生成验证码失败');
+                    // 启动倒计时
+                    startCountdown();
+                }
+            } catch (error) {
+                showError('网络错误: ' + error.message);
+                // 启动倒计时
+                startCountdown();
+            }
+        }
+
+        // 显示结果
+        function showResult(token) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="result" id="token-result" style="cursor: pointer;" onclick="copyToClipboard('${token}')">
+                    验证码: ${token} (点击复制)
+                </div>
+            `;
+        }
+
+        // 复制到剪贴板
+        function copyToClipboard(token) {
+            navigator.clipboard.writeText(token).then(() => {
+                // 显示复制成功的提示
+                const resultDiv = document.getElementById('token-result');
+                const originalText = resultDiv.textContent;
+                resultDiv.textContent = '验证码已复制到剪贴板!';
+                
+                // 2秒后恢复原文本
+                setTimeout(() => {
+                    resultDiv.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('复制失败: ', err);
+                alert('复制失败，请手动复制');
+            });
+        }
+
+        // 显示错误
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="error">
+                    错误: ${message}
+                </div>
+            `;
+        }
+
+        // 按Enter键生成验证码
+        document.getElementById('secret').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generateTOTP();
+            }
+        });
+    </script>
+</body>
+</html>
