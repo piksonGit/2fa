@@ -51,11 +51,14 @@ function generateTOTP(secret, timeStep = 30, digits = 6, algorithm = 'sha1') {
 // 生成TOTP的API端点
 app.post('/generate-totp', (req, res) => {
   try {
-    const { secret } = req.body;
+    let { secret } = req.body;
     
     if (!secret) {
       return res.status(400).json({ error: '缺少密钥参数' });
     }
+    
+    // 去除空格并限制长度为100个字符
+    secret = secret.replace(/\s/g, '').substring(0, 100);
     
     // 验证Base32格式
     if (!/^[A-Z2-7]+=*$/i.test(secret)) {

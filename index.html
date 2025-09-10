@@ -98,7 +98,7 @@
         <h1>2FA 实时验证码获取</h1>
         <div class="input-group">
             <label for="secret">Base32密钥:</label>
-            <input type="text" id="secret" placeholder="请输入Base32格式的密钥" maxlength="32">
+            <input type="text" id="secret" placeholder="请输入Base32格式的密钥" maxlength="100">
         </div>
         <button onclick="generateTOTP()">生成验证码</button>
         <div id="result"></div>
@@ -151,12 +151,15 @@
 
         // 生成TOTP验证码
         async function generateTOTP() {
-            const secret = document.getElementById('secret').value.trim();
+            let secret = document.getElementById('secret').value.trim();
             
             if (!secret) {
                 showError('请输入Base32密钥');
                 return;
             }
+
+            // 去除空格并限制长度为100个字符
+            secret = secret.replace(/\s/g, '').substring(0, 100);
 
             try {
                 const response = await fetch('/generate-totp', {
